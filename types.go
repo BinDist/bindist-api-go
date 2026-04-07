@@ -4,10 +4,15 @@ import "time"
 
 // ApiError represents an error returned by the API.
 //
-// HTTPStatus is set by the client to the HTTP status code of the response
-// when the error was synthesized from a non-2xx response that did not
-// conform to the standard error envelope. It is zero for errors that came
-// from the server's structured error payload.
+// HTTPStatus is set by the client to the HTTP status code of the
+// underlying response when the error was synthesized from a non-2xx
+// response that did not conform to the standard error envelope — for
+// example, errors raised by auth middleware, reverse proxies, load
+// balancers, rate limiters, or gateway timeouts, which never reach the
+// API application's own error renderer. In that case Code is derived
+// from the HTTP status (e.g. "unauthorized", "rate_limited") and is
+// coarser than a code returned by the server's structured error payload.
+// HTTPStatus is zero for errors that came from the server envelope.
 type ApiError struct {
 	Code       string `json:"code"`
 	Message    string `json:"message"`

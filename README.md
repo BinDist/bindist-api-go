@@ -282,15 +282,17 @@ All API methods return a `Response[T]` struct:
 
 ```go
 type Response[T any] struct {
-    Success bool
-    Data    T
-    Error   *ApiError
-    Meta    *Meta
+    Success    bool
+    Data       T
+    Error      *ApiError
+    Meta       *Meta
+    HTTPStatus int
 }
 
 type ApiError struct {
-    Code    string
-    Message string
+    Code       string
+    Message    string
+    HTTPStatus int // set for errors synthesized from non-2xx responses
 }
 
 type Meta struct {
@@ -315,6 +317,48 @@ if response.Success {
     // API error
     fmt.Printf("Error: %s\n", response.Error.Message)
     fmt.Printf("Code: %s\n", response.Error.Code)
+}
+```
+
+#### Errors from outside the API envelope
+
+Not every error reaches the API's structured error renderer. Responses
+from auth middleware, reverse proxies, load balancers, rate limiters, and
+gateway timeouts arrive with a plain body (or no body at all) and cannot
+be wrapped in the standard `{"success":false,"error":{...}}` envelope.
+
+When the client sees a non-2xx response, it normalizes it into the usual
+`Response[T]` shape so consumers only need one code path:
+
+- `response.Success` is forced to `false`.
+- `response.HTTPStatus` is set to the underlying HTTP status code.
+- `response.Error` is either the server-provided error (with
+  `HTTPStatus` filled in) or a synthesized `ApiError` whose `Code` is
+  derived from the HTTP status (`unauthorized`, `forbidden`, `not_found`,
+  `rate_limited`, `server_error`, `http_error`, ...) and whose `Message`
+  is extracted from a bare `{"message":...}`/`{"error":...}` body or
+  falls back to `http.StatusText`.
+
+A synthesized error means the failure originated *outside* the API
+application itself, so its `Code` is coarser than a code returned by the
+server's own error renderer. Switch on `HTTPStatus` if you need to react
+to the transport-level status, and on `Error.Code` if you need to react
+to specific semantic categories:
+
+```go
+response, err := client.ListApplications(ctx, nil)
+if err != nil {
+    log.Fatalf("Request failed: %v", err)
+}
+if !response.Success {
+    switch response.Error.Code {
+    case "unauthorized":
+        // Bad/missing API key — often from auth middleware, not the app.
+    case "rate_limited":
+        // Back off and retry.
+    default:
+        log.Printf("API error %d: %s", response.HTTPStatus, response.Error.Message)
+    }
 }
 ```
 
