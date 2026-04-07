@@ -69,16 +69,94 @@ func parseResponse[T any](resp *http.Response) (*Response[T], error) {
 	}
 
 	var apiResp apiResponse[T]
-	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	parseErr := json.Unmarshal(bodyBytes, &apiResp)
+
+	out := &Response[T]{
+		Success:    apiResp.Success,
+		Data:       apiResp.Data,
+		Error:      apiResp.Error,
+		Meta:       apiResp.Meta,
+		HTTPStatus: resp.StatusCode,
 	}
 
-	return &Response[T]{
-		Success: apiResp.Success,
-		Data:    apiResp.Data,
-		Error:   apiResp.Error,
-		Meta:    apiResp.Meta,
-	}, nil
+	if resp.StatusCode >= 400 {
+		// Non-2xx: ensure callers see Success=false and a populated Error,
+		// even when the body isn't a standard envelope (e.g. plain
+		// {"message":"Unauthorized"}, an HTML 502 page, or empty body).
+		out.Success = false
+		if out.Error == nil {
+			out.Error = synthesizeError(resp.StatusCode, bodyBytes, parseErr)
+		} else if out.Error.HTTPStatus == 0 {
+			out.Error.HTTPStatus = resp.StatusCode
+		}
+		return out, nil
+	}
+
+	if parseErr != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", parseErr)
+	}
+
+	return out, nil
+}
+
+// synthesizeError builds an ApiError for a non-2xx response whose body
+// did not contain a standard error envelope. It tries to extract a useful
+// message from a bare {"message":"..."} body, falling back to the HTTP
+// status text.
+func synthesizeError(status int, body []byte, parseErr error) *ApiError {
+	message := ""
+	if parseErr == nil {
+		// Body parsed as JSON but didn't fill apiResp.Error. Try a bare
+		// {"message": "..."} or {"error": "..."} shape.
+		var bare struct {
+			Message string `json:"message"`
+			Error   string `json:"error"`
+		}
+		if json.Unmarshal(body, &bare) == nil {
+			if bare.Message != "" {
+				message = bare.Message
+			} else if bare.Error != "" {
+				message = bare.Error
+			}
+		}
+	}
+	if message == "" {
+		message = http.StatusText(status)
+	}
+	if message == "" {
+		message = "http error"
+	}
+	return &ApiError{
+		Code:       httpStatusCode(status),
+		Message:    message,
+		HTTPStatus: status,
+	}
+}
+
+// httpStatusCode returns a stable string code for common HTTP statuses
+// so callers can switch on err.Code without parsing the message.
+func httpStatusCode(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "bad_request"
+	case http.StatusUnauthorized:
+		return "unauthorized"
+	case http.StatusForbidden:
+		return "forbidden"
+	case http.StatusNotFound:
+		return "not_found"
+	case http.StatusConflict:
+		return "conflict"
+	case http.StatusTooManyRequests:
+		return "rate_limited"
+	}
+	switch {
+	case status >= 500:
+		return "server_error"
+	case status >= 400:
+		return "http_error"
+	}
+	return "http_error"
 }
 
 // ListApplications returns a list of available applications.
@@ -111,10 +189,11 @@ func (c *Client) ListApplications(ctx context.Context, opts *ListApplicationsOpt
 	}
 
 	return &Response[[]Application]{
-		Success: result.Success,
-		Data:    result.Data.Applications,
-		Error:   result.Error,
-		Meta:    result.Meta,
+		Success:    result.Success,
+		Data:       result.Data.Applications,
+		Error:      result.Error,
+		Meta:       result.Meta,
+		HTTPStatus: result.HTTPStatus,
 	}, nil
 }
 
@@ -146,10 +225,11 @@ func (c *Client) ListVersions(ctx context.Context, applicationID string, opts ..
 	}
 
 	return &Response[[]Version]{
-		Success: result.Success,
-		Data:    result.Data.Versions,
-		Error:   result.Error,
-		Meta:    result.Meta,
+		Success:    result.Success,
+		Data:       result.Data.Versions,
+		Error:      result.Error,
+		Meta:       result.Meta,
+		HTTPStatus: result.HTTPStatus,
 	}, nil
 }
 
@@ -169,10 +249,11 @@ func (c *Client) ListVersionFiles(ctx context.Context, applicationID, version st
 	}
 
 	return &Response[[]VersionFile]{
-		Success: result.Success,
-		Data:    result.Data.Files,
-		Error:   result.Error,
-		Meta:    result.Meta,
+		Success:    result.Success,
+		Data:       result.Data.Files,
+		Error:      result.Error,
+		Meta:       result.Meta,
+		HTTPStatus: result.HTTPStatus,
 	}, nil
 }
 

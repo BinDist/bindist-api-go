@@ -3,9 +3,15 @@ package bindist
 import "time"
 
 // ApiError represents an error returned by the API.
+//
+// HTTPStatus is set by the client to the HTTP status code of the response
+// when the error was synthesized from a non-2xx response that did not
+// conform to the standard error envelope. It is zero for errors that came
+// from the server's structured error payload.
 type ApiError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code       string `json:"code"`
+	Message    string `json:"message"`
+	HTTPStatus int    `json:"-"`
 }
 
 // Pagination contains pagination information.
@@ -129,11 +135,14 @@ type apiResponse[T any] struct {
 }
 
 // Response is a generic response type.
+//
+// HTTPStatus is the HTTP status code of the underlying response.
 type Response[T any] struct {
-	Success bool
-	Data    T
-	Error   *ApiError
-	Meta    *Meta
+	Success    bool
+	Data       T
+	Error      *ApiError
+	Meta       *Meta
+	HTTPStatus int
 }
 
 // applicationsData wraps the applications array.

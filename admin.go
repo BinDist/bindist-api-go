@@ -371,10 +371,11 @@ func (c *AdminClient) ListActivity(ctx context.Context, activityType, applicatio
 	}
 
 	return &Response[[]Activity]{
-		Success: result.Success,
-		Data:    result.Data.Activities,
-		Error:   result.Error,
-		Meta:    result.Meta,
+		Success:    result.Success,
+		Data:       result.Data.Activities,
+		Error:      result.Error,
+		Meta:       result.Meta,
+		HTTPStatus: result.HTTPStatus,
 	}, nil
 }
 
@@ -399,9 +400,10 @@ func (c *AdminClient) ListCustomers(ctx context.Context, page, pageSize int) (*R
 	}
 
 	return &Response[[]Customer]{
-		Success: result.Success,
-		Data:    result.Data.Customers,
-		Error:   result.Error,
-		Meta:    result.Meta,
+		Success:    result.Success,
+		Data:       result.Data.Customers,
+		Error:      result.Error,
+		Meta:       result.Meta,
+		HTTPStatus: result.HTTPStatus,
 	}, nil
 }
