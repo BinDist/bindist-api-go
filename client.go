@@ -39,7 +39,7 @@ func (c *Client) SetHTTPClient(client *http.Client) {
 	c.httpClient = client
 }
 
-func (c *Client) doRequest(ctx context.Context, method, path string, query url.Values, body io.Reader) (*http.Response, error) {
+func (c *Client) doRequest(ctx context.Context, method, path string, query url.Values, body io.Reader, opts *requestOptions) (*http.Response, error) {
 	reqURL := c.baseURL + path
 	if len(query) > 0 {
 		reqURL += "?" + query.Encode()
@@ -52,6 +52,10 @@ func (c *Client) doRequest(ctx context.Context, method, path string, query url.V
 
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
+
+	if opts != nil && opts.channel != "" {
+		req.Header.Set("X-Channel", opts.channel)
+	}
 
 	return c.httpClient.Do(req)
 }
@@ -96,7 +100,7 @@ func (c *Client) ListApplications(ctx context.Context, opts *ListApplicationsOpt
 		}
 	}
 
-	resp, err := c.doRequest(ctx, "GET", "/v1/applications", query, nil)
+	resp, err := c.doRequest(ctx, "GET", "/v1/applications", query, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +120,7 @@ func (c *Client) ListApplications(ctx context.Context, opts *ListApplicationsOpt
 
 // GetApplication returns details for a specific application.
 func (c *Client) GetApplication(ctx context.Context, applicationID string) (*Response[Application], error) {
-	resp, err := c.doRequest(ctx, "GET", "/v1/applications/"+url.PathEscape(applicationID), nil, nil)
+	resp, err := c.doRequest(ctx, "GET", "/v1/applications/"+url.PathEscape(applicationID), nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -125,10 +129,13 @@ func (c *Client) GetApplication(ctx context.Context, applicationID string) (*Res
 }
 
 // ListVersions returns all versions for an application.
-func (c *Client) ListVersions(ctx context.Context, applicationID string) (*Response[[]Version], error) {
+//
+// Pass WithChannel to access versions outside the default production
+// channel (e.g. WithChannel(ChannelTest) to include disabled versions).
+func (c *Client) ListVersions(ctx context.Context, applicationID string, opts ...RequestOption) (*Response[[]Version], error) {
 	path := fmt.Sprintf("/v1/applications/%s/versions", url.PathEscape(applicationID))
 
-	resp, err := c.doRequest(ctx, "GET", path, nil, nil)
+	resp, err := c.doRequest(ctx, "GET", path, nil, nil, newRequestOptions(opts))
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +158,7 @@ func (c *Client) ListVersionFiles(ctx context.Context, applicationID, version st
 	path := fmt.Sprintf("/v1/applications/%s/versions/%s/files",
 		url.PathEscape(applicationID), url.PathEscape(version))
 
-	resp, err := c.doRequest(ctx, "GET", path, nil, nil)
+	resp, err := c.doRequest(ctx, "GET", path, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +177,11 @@ func (c *Client) ListVersionFiles(ctx context.Context, applicationID, version st
 }
 
 // GetDownloadInfo returns download URL and metadata for a file.
-func (c *Client) GetDownloadInfo(ctx context.Context, applicationID, version, fileID string) (*Response[DownloadInfo], error) {
+//
+// Pass WithChannel to obtain a download URL for a version that is only
+// accessible on a non-default channel (e.g. WithChannel(ChannelTest) for
+// disabled versions).
+func (c *Client) GetDownloadInfo(ctx context.Context, applicationID, version, fileID string, opts ...RequestOption) (*Response[DownloadInfo], error) {
 	query := url.Values{}
 	query.Set("applicationId", applicationID)
 	query.Set("version", version)
@@ -178,7 +189,7 @@ func (c *Client) GetDownloadInfo(ctx context.Context, applicationID, version, fi
 		query.Set("fileId", fileID)
 	}
 
-	resp, err := c.doRequest(ctx, "GET", "/v1/downloads/url", query, nil)
+	resp, err := c.doRequest(ctx, "GET", "/v1/downloads/url", query, nil, newRequestOptions(opts))
 	if err != nil {
 		return nil, err
 	}
@@ -188,9 +199,11 @@ func (c *Client) GetDownloadInfo(ctx context.Context, applicationID, version, fi
 
 // DownloadFile downloads a file and returns its contents along with metadata.
 // If verifyChecksum is true, the checksum is verified against the expected value.
-func (c *Client) DownloadFile(ctx context.Context, applicationID, version, fileID string, verifyChecksum bool) ([]byte, *DownloadInfo, error) {
+//
+// Pass WithChannel to download from a non-default release channel.
+func (c *Client) DownloadFile(ctx context.Context, applicationID, version, fileID string, verifyChecksum bool, opts ...RequestOption) ([]byte, *DownloadInfo, error) {
 	// Get download info
-	infoResp, err := c.GetDownloadInfo(ctx, applicationID, version, fileID)
+	infoResp, err := c.GetDownloadInfo(ctx, applicationID, version, fileID, opts...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get download info: %w", err)
 	}
@@ -238,9 +251,11 @@ func (c *Client) DownloadFile(ctx context.Context, applicationID, version, fileI
 
 // DownloadFileToWriter downloads a file and writes it to the provided writer.
 // Returns the download metadata.
-func (c *Client) DownloadFileToWriter(ctx context.Context, applicationID, version, fileID string, w io.Writer) (*DownloadInfo, error) {
+//
+// Pass WithChannel to download from a non-default release channel.
+func (c *Client) DownloadFileToWriter(ctx context.Context, applicationID, version, fileID string, w io.Writer, opts ...RequestOption) (*DownloadInfo, error) {
 	// Get download info
-	infoResp, err := c.GetDownloadInfo(ctx, applicationID, version, fileID)
+	infoResp, err := c.GetDownloadInfo(ctx, applicationID, version, fileID, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get download info: %w", err)
 	}
@@ -292,7 +307,7 @@ func (c *Client) CreateShareLink(ctx context.Context, applicationID, version, fi
 		return nil, err
 	}
 
-	resp, err := c.doRequest(ctx, "POST", "/v1/downloads/share", nil, bytes.NewReader(body))
+	resp, err := c.doRequest(ctx, "POST", "/v1/downloads/share", nil, bytes.NewReader(body), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +319,7 @@ func (c *Client) CreateShareLink(ctx context.Context, applicationID, version, fi
 func (c *Client) GetStats(ctx context.Context, applicationID string) (*Response[Stats], error) {
 	path := fmt.Sprintf("/v1/applications/%s/stats", url.PathEscape(applicationID))
 
-	resp, err := c.doRequest(ctx, "GET", path, nil, nil)
+	resp, err := c.doRequest(ctx, "GET", path, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}

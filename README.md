@@ -318,6 +318,29 @@ if response.Success {
 }
 ```
 
+### Release Channels
+
+Versions can be published on different release channels. By default, requests
+return only versions on the production channel. Pass `WithChannel` to
+`ListVersions`, `GetDownloadInfo`, `DownloadFile`, or `DownloadFileToWriter`
+to access versions on a non-default channel — for example, the built-in
+`ChannelTest` constant exposes disabled/pre-release versions.
+
+```go
+// List versions including disabled ones on the Test channel
+versions, err := client.ListVersions(ctx, "myapp", bindist.WithChannel(bindist.ChannelTest))
+
+// Get a download URL for a version that is only available on the Test channel
+download, err := client.GetDownloadInfo(ctx, "myapp", "1.2.3-rc1", "",
+    bindist.WithChannel(bindist.ChannelTest))
+
+// Download directly from the Test channel
+content, metadata, err := client.DownloadFile(ctx, "myapp", "1.2.3-rc1", "", true,
+    bindist.WithChannel(bindist.ChannelTest))
+```
+
+Internally, `WithChannel` sets the `X-Channel` HTTP header on the request.
+
 ### Download with Checksum Verification
 
 The `DownloadFile` method can optionally verify SHA256 checksums:

@@ -88,6 +88,38 @@ type ListApplicationsOptions struct {
 	Tags     []string
 }
 
+// Release channel constants. Channels allow access to versions outside the
+// default (production) channel. For example, the "Test" channel exposes
+// disabled versions for pre-release testing.
+const (
+	ChannelTest = "Test"
+)
+
+// RequestOption configures a single API request.
+type RequestOption func(*requestOptions)
+
+// requestOptions holds per-request configuration applied by RequestOptions.
+type requestOptions struct {
+	channel string
+}
+
+func newRequestOptions(opts []RequestOption) *requestOptions {
+	o := &requestOptions{}
+	for _, opt := range opts {
+		opt(o)
+	}
+	return o
+}
+
+// WithChannel sets the release channel for the request. When set, the
+// X-Channel header is sent and versions from that channel become accessible
+// (e.g. ChannelTest to access disabled/pre-release versions).
+func WithChannel(channel string) RequestOption {
+	return func(o *requestOptions) {
+		o.channel = channel
+	}
+}
+
 // apiResponse is the generic API response wrapper.
 type apiResponse[T any] struct {
 	Success bool      `json:"success"`
