@@ -93,7 +93,9 @@ type Stats struct {
 
 // ListApplicationsOptions contains options for listing applications.
 type ListApplicationsOptions struct {
-	Page     int
+	Page int
+	// PageSize is sent as the "limit" query parameter, which is the name
+	// the API reads. Values above 100 are clamped by the server.
 	PageSize int
 	Search   string
 	Tags     []string
