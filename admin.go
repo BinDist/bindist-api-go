@@ -357,7 +357,7 @@ func (c *AdminClient) ListActivity(ctx context.Context, activityType, applicatio
 		query.Set("page", strconv.Itoa(page))
 	}
 	if pageSize > 0 {
-		query.Set("pageSize", strconv.Itoa(pageSize))
+		query.Set("limit", strconv.Itoa(pageSize))
 	}
 
 	resp, err := c.doRequest(ctx, "GET", "/v1/activity", query, nil)
@@ -386,7 +386,7 @@ func (c *AdminClient) ListCustomers(ctx context.Context, page, pageSize int) (*R
 		query.Set("page", strconv.Itoa(page))
 	}
 	if pageSize > 0 {
-		query.Set("pageSize", strconv.Itoa(pageSize))
+		query.Set("limit", strconv.Itoa(pageSize))
 	}
 
 	resp, err := c.doRequest(ctx, "GET", "/v1/management/customers", query, nil)

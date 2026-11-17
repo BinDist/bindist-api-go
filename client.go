@@ -168,7 +168,7 @@ func (c *Client) ListApplications(ctx context.Context, opts *ListApplicationsOpt
 			query.Set("page", strconv.Itoa(opts.Page))
 		}
 		if opts.PageSize > 0 {
-			query.Set("pageSize", strconv.Itoa(opts.PageSize))
+			query.Set("limit", strconv.Itoa(opts.PageSize))
 		}
 		if opts.Search != "" {
 			query.Set("search", opts.Search)
